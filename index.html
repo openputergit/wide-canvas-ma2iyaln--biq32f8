@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Value Fresh - AI-Powered Grocery Store</title>
+    <script src="https://unpkg.com/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Poppins', sans-serif; }
+        .chatbot-container { transition: transform 0.3s ease-in-out; }
+        .loader { border-top-color: #3498db; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-white shadow-sm fixed w-full top-0 z-50">
+        <nav class="container mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center">
+                <i class="bi bi-bag-heart-fill text-3xl text-green-600"></i>
+                <h1 class="text-2xl font-bold ml-2 text-gray-800">Value Fresh</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="cartBtn" class="relative">
+                    <i class="bi bi-cart text-2xl"></i>
+                    <span id="cartCount" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center">0</span>
+                </button>
+                <button id="authBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Login</button>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 pt-20 pb-16">
+        <!-- AI Image Search -->
+        <section class="my-8">
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">AI-Powered Image Search</h2>
+                <div class="flex flex-col items-center">
+                    <label class="w-full max-w-md border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-green-500">
+                        <input type="file" id="imageInput" class="hidden" accept="image/*">
+                        <i class="bi bi-cloud-upload text-4xl text-gray-400"></i>
+                        <p class="mt-2">Upload an image of a grocery item</p>
+                    </label>
+                    <div id="imagePreview" class="mt-4 hidden">
+                        <img id="preview" class="max-w-xs rounded-lg">
+                        <div id="results" class="mt-4"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Trending Items -->
+        <section class="my-8">
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4">Trending in Your City</h2>
+                <div id="trendingItems" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Chatbot -->
+    <div id="chatbot" class="fixed bottom-4 right-4 transform translate-y-[calc(100%+1rem)] z-50">
+        <button id="chatToggle" class="absolute -top-12 right-0 bg-green-600 text-white p-3 rounded-full shadow-lg">
+            <i class="bi bi-chat-dots-fill"></i>
+        </button>
+        <div class="bg-white rounded-lg shadow-xl w-80 h-96 flex flex-col">
+            <div class="p-4 bg-green-600 text-white rounded-t-lg">
+                <h3 class="font-semibold">AI Assistant</h3>
+            </div>
+            <div id="chatMessages" class="flex-1 overflow-y-auto p-4"></div>
+            <div class="p-4 border-t">
+                <input type="text" id="chatInput" placeholder="Type your message..." class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-green-500">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mock data for trending items
+        const trendingItems = [
+            { name: 'Fresh Apples', price: '$2.99', image: 'https://images.unsplash.com/photo-1567306226416-28f0efdc88ce' },
+            { name: 'Organic Bananas', price: '$1.99', image: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e' },
+            { name: 'Fresh Milk', price: '$3.49', image: 'https://images.unsplash.com/photo-1550583724-b2692b85b150' },
+            { name: 'Whole Wheat Bread', price: '$2.49', image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff' }
+        ];
+
+        // Initialize cart
+        let cartItems = 0;
+
+        // Render trending items
+        document.getElementById('trendingItems').innerHTML = trendingItems.map(item => `
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <img src="${item.image}" alt="${item.name}" class="w-full h-32 object-cover rounded-lg mb-2">
+                <h3 class="font-semibold">${item.name}</h3>
+                <p class="text-green-600">${item.price}</p>
+                <button onclick="addToCart()" class="mt-2 w-full bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700">
+                    Add to Cart
+                </button>
+            </div>
+        `).join('');
+
+        // Image upload and AI processing
+        document.getElementById('imageInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const img = document.getElementById('preview');
+                    img.src = e.target.result;
+                    document.getElementById('imagePreview').classList.remove('hidden');
+                    
+                    // Simulate AI processing
+                    document.getElementById('results').innerHTML = `
+                        <div class="text-green-600 font-semibold">Found similar items:</div>
+                        <div class="grid grid-cols-2 gap-2 mt-2">
+                            ${trendingItems.slice(0,2).map(item => `
+                                <div class="bg-gray-50 p-2 rounded">
+                                    <img src="${item.image}" class="w-full h-20 object-cover rounded">
+                                    <p class="text-sm mt-1">${item.name}</p>
+                                    <p class="text-sm text-green-600">${item.price}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Chatbot functionality
+        const chatToggle = document.getElementById('chatToggle');
+        const chatbot = document.getElementById('chatbot');
+        const chatInput = document.getElementById('chatInput');
+        const chatMessages = document.getElementById('chatMessages');
+
+        chatToggle.addEventListener('click', () => {
+            chatbot.classList.toggle('translate-y-0');
+        });
+
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && chatInput.value.trim()) {
+                addMessage('user', chatInput.value);
+                setTimeout(() => {
+                    addMessage('bot', 'Thank you for your message. How can I help you today?');
+                }, 1000);
+                chatInput.value = '';
+            }
+        });
+
+        function addMessage(type, text) {
+            const message = document.createElement('div');
+            message.className = `mb-2 ${type === 'user' ? 'text-right' : ''}`;
+            message.innerHTML = `
+                <span class="inline-block px-3 py-2 rounded-lg ${
+                    type === 'user' ? 'bg-green-600 text-white' : 'bg-gray-100'
+                }">${text}</span>
+            `;
+            chatMessages.appendChild(message);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Cart functionality
+        function addToCart() {
+            cartItems++;
+            document.getElementById('cartCount').textContent = cartItems;
+        }
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
